@@ -1,17 +1,39 @@
 import streamlit as st
 import pandas as pd
-from PIL import Image
+from datetime import datetime
+import openpyxl
 
 # Load tweet data
 data = pd.read_excel('Book1.xlsx')
 
-# Initialize session state
+# Initialize session state for index and log
 if "index" not in st.session_state:
+    # Randomize tweet order
+    st.session_state.data_shuffled = data.sample(frac=1).reset_index(drop=True)
     st.session_state.index = 0
-    st.session_state.cyberbullying_count = 0
-    st.session_state.non_cyberbullying_count = 0
 
-# Set custom CSS for a Tinder-like look
+# Define the log file
+log_file = 'swipe_log.xlsx'
+
+# Function to log user's swipe action in a new sheet
+def log_swipe_to_excel(tweet, is_cyberbullying):
+    # Create a DataFrame row for the log entry
+    log_entry = pd.DataFrame({
+        'Timestamp': [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+        'Tweet': [tweet],
+        'Cyberbullying': [is_cyberbullying]
+    })
+
+    # Append to the "Log" sheet in the Excel file
+    try:
+        with pd.ExcelWriter(log_file, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+            log_entry.to_excel(writer, sheet_name="Log", index=False, header=False, startrow=writer.sheets["Log"].max_row)
+    except FileNotFoundError:
+        # If the log file or sheet doesn't exist, create it with headers
+        with pd.ExcelWriter(log_file, engine="openpyxl") as writer:
+            log_entry.to_excel(writer, sheet_name="Log", index=False)
+
+# CSS styling for Tinder-like appearance
 st.markdown("""
     <style>
         .tweet-card {
@@ -55,10 +77,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Display the current tweet
-if st.session_state.index < len(data):
-    tweet = data.iloc[st.session_state.index]["Tweet"]
+if st.session_state.index < len(st.session_state.data_shuffled):
+    tweet = st.session_state.data_shuffled.iloc[st.session_state.index]["Tweet"]
 
-    # Tweet card style
+    # Display tweet in card style
     st.markdown(f"<div class='tweet-card'>{tweet}</div>", unsafe_allow_html=True)
 
     # Buttons styled like Tinder swipe buttons
@@ -66,17 +88,13 @@ if st.session_state.index < len(data):
 
     with col1:
         if st.button("Swipe Left (Not Cyberbullying)", key="left", help="Mark as not cyberbullying"):
-            if data.iloc[st.session_state.index]["Cyberbullying"] == False:
-                st.session_state.non_cyberbullying_count += 1
-            st.session_state.index += 1
+            log_swipe_to_excel(tweet, False)  # Log this swipe action
+            st.session_state.index += 1  # Move to the next tweet
 
     with col2:
         if st.button("Swipe Right (Cyberbullying)", key="right", help="Mark as cyberbullying"):
-            if data.iloc[st.session_state.index]["Cyberbullying"] == True:
-                st.session_state.cyberbullying_count += 1
-            st.session_state.index += 1
+            log_swipe_to_excel(tweet, True)  # Log this swipe action
+            st.session_state.index += 1  # Move to the next tweet
 else:
     # End of tweets
     st.write("End of Tweets! Thanks for participating.")
-    st.write(f"Cyberbullying tweets identified: {st.session_state.cyberbullying_count}")
-    st.write(f"Non-cyberbullying tweets identified: {st.session_state.non_cyberbullying_count}")
